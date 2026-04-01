@@ -2,7 +2,10 @@
 
 > Una base de datos NoSQL local para Node.js, inspirada en MongoDB y construida con pura curiosidad y ganas de aprender.
 
-MonkeyDB es una base de datos experimental que almacena datos en archivos JSON, diseñada para proyectos pequeños que necesitan una API familiar de MongoDB sin levantar un servidor externo. Nació como un ejercicio de aprendizaje y para cubrir una necesidad personal: quería una base de datos local y liviana que se sintiera como MongoDB, pero sin saber que ya existían varias alternativas consolidadas. Así que… ¡decidí construir la mía!
+
+![Si no estoy durmiendo, estoy programando](assets/monkeydb.png) *Si no estoy durmiendo, estoy programando.*
+
+MonkeyDB es una base de datos experimental que almacena datos en archivos JSON, diseñada para proyectos pequeños que necesitan una API familiar de MongoDB sin levantar un servidor externo. Nació como un ejercicio de aprendizaje y para cubrir una necesidad personal: quería una base de datos local y liviana que se sintiera como MongoDB, pero sin saber que ya existían varias alternativas consolidadas. Así que… ¿Porque no construir la mia?.
 
 ## Características
 
