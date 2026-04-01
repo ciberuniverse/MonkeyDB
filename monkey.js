@@ -283,16 +283,27 @@ class MonkeyDB {
         if (!db_dir.includes(this.name_db)) {
             await fs.mkdir(this.name_db)
         }
-        
+
+        // Actualiza la lista de colecciones en la bd
+        this.#collections = await fs.readdir(this.uri + "/")
     }
 
     async create_collection(name_collection) {
         // Verifica y crea la carpeta de la base de datos si es necesario
         await this.#dir_db_exist()
-
-        // Verifica que las colecciones esten dentro de la carpeta de la base de datos
-        this.#collections = await fs.readdir(this.uri + "/")
+        
         return new MonkeyCli(name_collection, this.uri, this.cache)
+    }
+
+    async drop_collection(name_collection) {
+        await this.#dir_db_exist()
+
+        if (!this.#collections.includes(name_collection + ".json")) {
+            return false
+        }
+
+        await fs.rm(this.uri + "/" + name_collection + ".json")
+        return true
     }
 
 }
@@ -304,7 +315,7 @@ async function main() {
     
     
     const users = await MonkeyCLI_DB.create_collection("users")
-
+    console.log(await MonkeyCLI_DB.drop_collection("users"))
 
 }
 
