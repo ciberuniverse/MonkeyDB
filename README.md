@@ -81,17 +81,17 @@ MonkeyDB está en una fase **experimental**. Lo que ya funciona:
 - `create_collection`
 - `insert_one` / `insert_many`
 - `find` / `find_one` con proyecciones básicas (solo exclusión)
+- Operadores de consulta: `$gt`, `$lt`, `$in`, `$regex`, etc.
+- Caché funcional (actualmente en pruebas)
 - Uso asíncrono con `fs/promises`
 - Rutas configurables
 
 Próximas mejoras (¡contribuciones bienvenidas!):
 
-- Operadores de consulta: `$gt`, `$lt`, `$in`, `$regex`, etc.
 - Actualizaciones: `update_one`, `update_many`
 - Eliminaciones: `delete_one`, `delete_many`
 - Índices para mejorar búsquedas
 - Migración hacia/desde otras bases de datos (MongoDB, SQLite, etc.)
-- Caché funcional (actualmente en pruebas)
 - Tests unitarios y de integración
 
 ## Agradecimientos

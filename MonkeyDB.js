@@ -1,35 +1,6 @@
 const fs = require("fs/promises")
-const crypto = require("crypto")
-
-function monkey_db_return(acknowledged, _id = null, insertedCount = null, insertedIds = null) {
-    
-    let return_vars = {
-        "acknowledged": acknowledged,
-        "_id": _id,
-        "insertedCount": insertedCount
-    }
-
-
-    // Se itera cada clave valor de el diccionario y se eliminan los vacios
-    let key, value
-    for ([key, value] of Object.entries(return_vars)) {
-        if (value === null) {
-            delete return_vars[key]
-        }
-    }
-
-    return return_vars
-}
-
-function normalize_url(url = "") {
-    if (url.endsWith("/")) {return url.slice(0, -1)}
-    return url
-}
-
-function gen_uuid() {
-    let uuid = String(Date.now())
-    return crypto.createHash("md5").update(uuid).digest("hex")
-}
+const monkey_operators = require("./modules/operators.js")
+const monkey_utils = require("./modules/utils.js")
 
 async function read_document(name) {
     let document_read = await fs.readFile(name)
@@ -40,7 +11,81 @@ async function save_document(name, new_document_object) {
     await fs.writeFile(name, JSON.stringify(new_document_object))
 }
 
-function project(object_return, object_project) {
+function document_operators(one_doc, key_find, value_find) {
+
+    // Si se encuentra la coincidencia directa se retorna true
+    if (one_doc[key_find] === value_find) {return true}
+
+    // Si no es un objeto el que se envio es porque no contiene operadores por ende es falso
+    if (typeof value_find !== 'object') {return false} 
+
+
+    // Value find es esto: {"$ne": "ola"}
+    let operator = Object.keys(value_find)[0] // Esto se transforma en $ne
+    let operator_value = Object.values(value_find)[0] // Esto se transforma en 'ola'
+
+    let operator_in = monkey_operators.operators[operator] // Operator in obtiene la funcion almacenada en el diccionario
+
+    // Si no existe un operador valido o no existe una funcion asociada, se retorna falso
+    if (!operator || !operator_in) {
+        console.log(operator, value_find, operator_in)
+        return false
+    }
+    
+    // One doc value es el valor del documento tiene para comparar
+    let one_doc_value = one_doc[key_find]
+    
+    // Se pasan los dos parametros a comparar dependiendo del operador
+    return operator_in(one_doc_value, operator_value)
+
+}
+
+function iter_document_array(object_find, object_project = null, array_document, all = false) {
+
+    let return_doc = []
+    
+    // Se establece el numero de coincidencias desde el objeto a buscar
+    let check = Object.values(object_find).length
+
+
+
+    // Por cada documento encontrado se revisara que cumpla con el filtro enviado
+    for (let one_doc of array_document) {
+        
+        // Contador de coincidencias por usuario
+        let passed_check = 0
+
+        // Se setean las variables para usarle dentro del for
+        let key, value
+        
+        for ([key, value] of Object.entries(object_find)) {
+            if (document_operators(one_doc, key, value)) {passed_check += 1}
+        }
+
+        // Si se cumple con el filtro se agrega a la lista y se continua
+        if (passed_check === check && all) {
+            return_doc.push(project(one_doc, object_project))
+            continue
+        }
+        
+        // Si sigue siendo find y no find_one se salta a la siguiente iteracion
+        if (all) {continue}
+
+        // Si no se paso el filtro se continua a la siguiente iteracion
+        if (passed_check !== check) {continue}
+
+
+        // Se retorna la primera coincidencia con la proyeccion si es que se esta pidiendo uno solo
+        return project(project(one_doc, object_project))
+        }
+
+    // Se retornan todos los documentos en la lista
+    return return_doc
+
+}
+
+
+function project(object_return, object_project = null) {
     
     // Si es que no se trae ninguna proyeccion se retorna el objeto intacto
     if (object_project === null) {return object_return}
@@ -72,7 +117,7 @@ class MonkeyCli {
         this.name = name
 
         // Path collections es donde se almacenan todos los documentos
-        this.path_collections = normalize_url(path_collections)
+        this.path_collections = monkey_utils.normalize_url(path_collections)
         this.use_cache = use_cache
 
         // Full path collection incluye el nombre de este documento con json
@@ -143,30 +188,12 @@ class MonkeyCli {
         let exist_doc = await this.#cache_document()
         if (!exist_doc) {return {}}
 
-        // Se establece el numero de coincidencias desde el objeto a buscar
-        let check = Object.values(object_find).length
-
-        // Por cada documento encontrado se revisara que cumpla con el filtro enviado
-        for (let one_doc of this.#document_cached["document"]) {
-            
-            // Contador de coincidencias por usuario
-            let passed_check = 0
-
-            // Se setean las variables para usarle dentro del for
-            let key, value
-            
-            for ([key, value] of Object.entries(object_find)) {
-                if (one_doc[key] === value) {passed_check += 1}
-            }
-
-            // Se retorna la primera coincidencia con la proyeccion
-            if (passed_check === check) {
-                return project(one_doc, object_project)
-            }
-
-        }
-
-        return {}
+        return iter_document_array(
+            object_find,
+            object_project,
+            this.#document_cached["document"],
+            false
+        )
 
     }
 
@@ -176,35 +203,7 @@ class MonkeyCli {
         let exist_doc = await this.#cache_document()
         if (!exist_doc) {return []}
 
-        // Se establece el numero de coincidencias desde el objeto a buscar
-        let check = Object.values(object_find).length
-        let return_doc = []
-
-        // Por cada documento encontrado se revisara que cumpla con el filtro enviado
-        for (let one_doc of this.#document_cached["document"]) {
-
-            // Cantidad de coincidencias
-            let passed_check = 0
-
-            // Se setean las variables para usarle dentro del for
-            let key, value
-
-            for ([key, value] of Object.entries(object_find)) {
-                if (one_doc[key] === value) {passed_check += 1}
-            }
-
-            // Se retorna la primera coincidencia
-            if (passed_check === check) {
-
-                return_doc.push(
-                    project(one_doc, object_project)
-                )
-            
-            }
-
-        }
-
-        return return_doc
+        return iter_document_array(object_find, object_project, this.#document_cached["document"], true)
 
     }
 
@@ -212,7 +211,7 @@ class MonkeyCli {
         await this.#cache_document()
 
         let acknowledged = false
-        let _id = gen_uuid()
+        let _id = monkey_utils.gen_uuid()
 
         object_insert["_id"] = _id
 
@@ -225,7 +224,7 @@ class MonkeyCli {
         }
 
         acknowledged = true
-        return monkey_db_return(acknowledged, _id)
+        return monkey_utils.monkey_db_return(acknowledged, _id)
     }
 
     async insert_many(array_insert) {
@@ -237,7 +236,7 @@ class MonkeyCli {
         for (let doc_one of array_insert) {
             
             // Se genera un id para el objeto a insertar
-            let _id = gen_uuid()
+            let _id = monkey_utils.gen_uuid()
             
             // Se le asigna el id
             doc_one["_id"] = _id
@@ -254,7 +253,11 @@ class MonkeyCli {
         }
 
         acknowledged = true
-        return monkey_db_return(acknowledged, null, insertedIds.length, insertedIds)
+        return monkey_utils.monkey_db_return(acknowledged, null, insertedIds.length, insertedIds)
+    }
+
+    async delete_one(object_find) {
+
     }
 
     update_one(object_find, mod_filter) {
@@ -268,7 +271,7 @@ class MonkeyDB {
 
     constructor(name_db, path_db = ".", cache = false) {
         this.name_db = name_db
-        this.path_db = normalize_url(path_db)
+        this.path_db = monkey_utils.normalize_url(path_db)
 
         this.cache = cache
         this.uri = path_db + "/" + name_db
@@ -315,8 +318,13 @@ async function main() {
     
     
     const users = await MonkeyCLI_DB.create_collection("users")
-    console.log(await MonkeyCLI_DB.drop_collection("users"))
+    await users.insert_one({"name": "Jhon Doe"})
+    await users.insert_one({"name": "Jhon coe"})
+    await users.insert_one({"name": "Jhon Doe"})
 
+    console.log( await users.find({
+        "name": {"$eq": "Jhon coe"}
+    }))
 }
 
 main()
