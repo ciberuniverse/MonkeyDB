@@ -19,9 +19,31 @@ function document_operators(one_doc, key_find, value_find) {
     // Si no es un objeto el que se envio es porque no contiene operadores por ende es falso
     if (typeof value_find !== 'object') {return false} 
 
+    // Se obtiene la lista de operadores a trabajar
+    let operators_list_find = Object.keys(value_find)
+    
+    // Se verifica si es mas de uno. En caso de serlo se itera por cada operador enviando los resultados a un array
+    if (operators_list_find.length > 1) {
+        console.log("mas de un filtro")
+        
+        let result_filter = []
+        for (let key_operator of operators_list_find) {
+
+            operator_function_execute = monkey_operators.operators[key_operator]
+            if (!operator_function_execute) {
+                return false
+            }
+
+            result_filter.push(operator_function_execute(one_doc[key_find], value_find[key_operator]))
+        }
+
+        // Cuando se termina la iteracion, se verifica que el array contenga todas las respuestas como true.
+        return result_filter.every(x => x === true)
+
+    } 
 
     // Value find es esto: {"$ne": "ola"}
-    let operator = Object.keys(value_find)[0] // Esto se transforma en $ne
+    let operator = operators_list_find[0] // Esto se transforma en $ne
     let operator_value = Object.values(value_find)[0] // Esto se transforma en 'ola'
 
     let operator_in = monkey_operators.operators[operator] // Operator in obtiene la funcion almacenada en el diccionario
@@ -39,14 +61,16 @@ function document_operators(one_doc, key_find, value_find) {
     return operator_in(one_doc_value, operator_value)
 
 }
-
-function iter_document_array(object_find, object_project = null, array_document, all = false) {
+let iters_with_index = ["delete_many", "delete_one"]
+function iter_document_array(object_find, object_project = null, array_document, type_r = "find") {
 
     let return_doc = []
+    let index_list = 0 // Variable que se usara para todo lo que requiera indice de listas
+
     
     // Se establece el numero de coincidencias desde el objeto a buscar
     let check = Object.values(object_find).length
-
+    
 
 
     // Por cada documento encontrado se revisara que cumpla con el filtro enviado
@@ -62,22 +86,41 @@ function iter_document_array(object_find, object_project = null, array_document,
             if (document_operators(one_doc, key, value)) {passed_check += 1}
         }
 
+        /* Seccion unicamente para resultados unicos que no requieren mayor iteracion */
+        // Se usan else if al ser mas rapidos
+        if (type_r === "delete_one" && passed_check === check) {
+            console.log(one_doc, index_list)
+            return index_list
+        }
+
+        // Se retorna la primera coincidencia con la proyeccion si es que se esta pidiendo uno solo
+        else if (type_r === "find_one" && passed_check === check) {
+            return project(project(one_doc, object_project))
+        }
+
+        /* ===================================================================== */
+
+        /* Seccion operacion listado 
+        
+        Todo lo que esta aqui debajo hasta lo limitado son las operaciones que requieren de una iteracion
+        completa del documento. Tales como find, delete_many
+        
+        */
+
         // Si se cumple con el filtro se agrega a la lista y se continua
-        if (passed_check === check && all) {
+        else if (type_r === "find" && passed_check === check) {
             return_doc.push(project(one_doc, object_project))
             continue
         }
-        
-        // Si sigue siendo find y no find_one se salta a la siguiente iteracion
-        if (all) {continue}
 
-        // Si no se paso el filtro se continua a la siguiente iteracion
-        if (passed_check !== check) {continue}
-
-
-        // Se retorna la primera coincidencia con la proyeccion si es que se esta pidiendo uno solo
-        return project(project(one_doc, object_project))
+        // Zonas que requieren indices
+        else if (type_r === "delete_many" && passed_check === check) {
+            return_doc.push(index_list)
         }
+
+        if (iters_with_index.includes(type_r)) {index_list += 1}
+        
+    }
 
     // Se retornan todos los documentos en la lista
     return return_doc
@@ -192,7 +235,7 @@ class MonkeyCli {
             object_find,
             object_project,
             this.#document_cached["document"],
-            false
+            "find_one"
         )
 
     }
@@ -203,7 +246,7 @@ class MonkeyCli {
         let exist_doc = await this.#cache_document()
         if (!exist_doc) {return []}
 
-        return iter_document_array(object_find, object_project, this.#document_cached["document"], true)
+        return iter_document_array(object_find, object_project, this.#document_cached["document"], "find")
 
     }
 
@@ -257,6 +300,37 @@ class MonkeyCli {
     }
 
     async delete_one(object_find) {
+        await this.#cache_document()
+
+        let acknowledged = false
+    
+        let index_delete = iter_document_array(object_find, null, this.#document_cached["document"], "delete_one")
+        this.#document_cached["document"].splice(index_delete)
+    
+        if (!this.use_cache) {
+            await save_document(this.full_path_collection, this.#document_cached["document"])
+        }
+
+        acknowledged = true
+        return monkey_utils.monkey_db_return(acknowledged)
+
+    }
+
+    async delete_many(object_find) {
+        await this.#cache_document()
+
+        let acknowledged = false
+        let array_of_index_delete = await iter_document_array(object_find, null, this.#document_cached["document"], "delete_many")
+        
+        for (let index_delete of array_of_index_delete) {this.#document_cached["document"].splice(index_delete)}
+        
+            
+        if (!this.use_cache) {
+            await save_document(this.full_path_collection, this.#document_cached["document"])
+        }
+
+        acknowledged = true
+        return monkey_utils.monkey_db_return(acknowledged)
 
     }
 
@@ -314,17 +388,20 @@ class MonkeyDB {
 
 const MonkeyCLI_DB = new MonkeyDB("monkey_test", ".", false)
 
-async function main() {
+async function test() {
     
     
     const users = await MonkeyCLI_DB.create_collection("users")
-    await users.insert_one({"name": "Jhon Doe"})
     await users.insert_one({"name": "Jhon coe"})
-    await users.insert_one({"name": "Jhon Doe"})
+    await users.insert_one({"name": "Jhon Doe", "edad": 74})
 
-    console.log( await users.find({
-        "name": {"$eq": "Jhon coe"}
+    console.log( await users.find_one({
+        "name": {"$eq": "Jhon Doe"}, "edad": {"$gt": 40, "$lte": 75}
     }))
+
+    
+    console.log(await users.find_one({}))
+    console.log(await users.delete_many({"_id": {"$ne": "433ed0084651103ec7602d4719f64971"}}))
 }
 
-main()
+test()
