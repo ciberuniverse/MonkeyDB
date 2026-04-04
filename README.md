@@ -2,10 +2,10 @@
 
 > Una base de datos NoSQL local para Node.js, inspirada en MongoDB y construida con pura curiosidad y ganas de aprender.
 
+![Si no estoy durmiendo, estoy programando](assets/monkeydb.png)  
+*Si no estoy durmiendo, estoy programando.*
 
-![Si no estoy durmiendo, estoy programando](assets/monkeydb.png) *Si no estoy durmiendo, estoy programando.*
-
-MonkeyDB es una base de datos experimental que almacena datos en archivos JSON, diseñada para proyectos pequeños que necesitan una API familiar de MongoDB sin levantar un servidor externo. Nació como un ejercicio de aprendizaje y para cubrir una necesidad personal: quería una base de datos local y liviana que se sintiera como MongoDB, pero sin saber que ya existían varias alternativas consolidadas. Así que… ¿Porque no construir la mia?.
+MonkeyDB es una base de datos experimental que almacena datos en archivos JSON, diseñada para proyectos pequeños que necesitan una API familiar de MongoDB sin levantar un servidor externo. Nació como un ejercicio de aprendizaje y para cubrir una necesidad personal: quería una base de datos local y liviana que se sintiera como MongoDB, pero sin saber que ya existían varias alternativas consolidadas. Así que… ¿Por qué no construir la mía?
 
 ## Características
 
@@ -82,19 +82,30 @@ MonkeyDB está en una fase **experimental**. Lo que ya funciona:
 - `insert_one` / `insert_many`
 - `find` / `find_one` con proyecciones básicas (solo exclusión)
 - Operadores de consulta: `$gt`, `$lt`, `$in`, `$regex`, etc.
+- Actualizaciones: `update_one`, `update_many`
 - Eliminaciones: `delete_one`, `delete_many`
 - Caché funcional (actualmente en pruebas)
-- Proyecciones (actualmente basicas, de primera capa)
 - Uso asíncrono con `fs/promises`
 - Rutas configurables
-- Test manuales
+- Tests manuales
 
 Próximas mejoras (¡contribuciones bienvenidas!):
 
-- Actualizaciones: `update_one`, `update_many`
-- Índices para mejorar búsquedas
-- Migración hacia/desde otras bases de datos (MongoDB, SQLite, etc.)
-- Tests unitarios y de integración
+- 🔄 Índices para mejorar búsquedas
+- 🔄 Migración hacia/desde otras bases de datos (MongoDB, SQLite, etc.)
+- 🔄 Tests unitarios y de integración
+
+## Módulos
+
+MonkeyDB está organizado en tres módulos internos que mantienen el código limpio y extensible:
+
+| Módulo | Archivo | Propósito |
+|--------|---------|-----------|
+| **Operadores de actualización** | `operators_update.js` | Contiene todas las funciones y utilidades para acciones de update: `$set`, `$unset`, `$rename`, `$max`, `$min`, `$currentDate`, `$push`, `$pull`, etc. Exporta como única utilidad la función `operators_update`. |
+| **Operadores de búsqueda** | `operators.js` | Implementa los operadores de consulta: `$ne`, `$nin`, `$in`, `$eq`, `$lt`, `$gt`, etc. Exporta como única función `operators_find`. |
+| **Utilidades** | `utils.js` | Funciones de mantenimiento y ayuda, como las respuestas uniformes de MonkeyDB (consistencia en los formatos de salida). |
+
+Estos módulos se integran en el archivo principal y permiten añadir nuevos operadores sin modificar la lógica central.
 
 ## Agradecimientos
 

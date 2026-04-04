@@ -1,5 +1,6 @@
 const fs = require("fs/promises")
 const monkey_operators = require("./modules/operators.js")
+const monkey_operators_update = require("./modules/operators_update.js")
 const monkey_utils = require("./modules/utils.js")
 
 async function read_document(name) {
@@ -11,57 +12,7 @@ async function save_document(name, new_document_object) {
     await fs.writeFile(name, JSON.stringify(new_document_object))
 }
 
-function document_operators(one_doc, key_find, value_find) {
-
-    // Si se encuentra la coincidencia directa se retorna true
-    if (one_doc[key_find] === value_find) {return true}
-
-    // Si no es un objeto el que se envio es porque no contiene operadores por ende es falso
-    if (typeof value_find !== 'object') {return false} 
-
-    // Se obtiene la lista de operadores a trabajar
-    let operators_list_find = Object.keys(value_find)
-    
-    // Se verifica si es mas de uno. En caso de serlo se itera por cada operador enviando los resultados a un array
-    if (operators_list_find.length > 1) {
-        console.log("mas de un filtro")
-        
-        let result_filter = []
-        for (let key_operator of operators_list_find) {
-
-            operator_function_execute = monkey_operators.operators[key_operator]
-            if (!operator_function_execute) {
-                return false
-            }
-
-            result_filter.push(operator_function_execute(one_doc[key_find], value_find[key_operator]))
-        }
-
-        // Cuando se termina la iteracion, se verifica que el array contenga todas las respuestas como true.
-        return result_filter.every(x => x === true)
-
-    } 
-
-    // Value find es esto: {"$ne": "ola"}
-    let operator = operators_list_find[0] // Esto se transforma en $ne
-    let operator_value = Object.values(value_find)[0] // Esto se transforma en 'ola'
-
-    let operator_in = monkey_operators.operators[operator] // Operator in obtiene la funcion almacenada en el diccionario
-
-    // Si no existe un operador valido o no existe una funcion asociada, se retorna falso
-    if (!operator || !operator_in) {
-        console.log(operator, value_find, operator_in)
-        return false
-    }
-    
-    // One doc value es el valor del documento tiene para comparar
-    let one_doc_value = one_doc[key_find]
-    
-    // Se pasan los dos parametros a comparar dependiendo del operador
-    return operator_in(one_doc_value, operator_value)
-
-}
-let iters_with_index = ["delete_many", "delete_one"]
+let iters_with_index = ["delete_many", "delete_one", "update_one", "update_many"]
 function iter_document_array(object_find, object_project = null, array_document, type_r = "find") {
 
     let return_doc = []
@@ -83,19 +34,22 @@ function iter_document_array(object_find, object_project = null, array_document,
         let key, value
         
         for ([key, value] of Object.entries(object_find)) {
-            if (document_operators(one_doc, key, value)) {passed_check += 1}
+            if (monkey_operators.operators_find(one_doc, key, value)) {passed_check += 1}
         }
 
         /* Seccion unicamente para resultados unicos que no requieren mayor iteracion */
         // Se usan else if al ser mas rapidos
         if (type_r === "delete_one" && passed_check === check) {
-            console.log(one_doc, index_list)
             return index_list
         }
 
         // Se retorna la primera coincidencia con la proyeccion si es que se esta pidiendo uno solo
         else if (type_r === "find_one" && passed_check === check) {
-            return project(project(one_doc, object_project))
+            return project(one_doc, object_project)
+        }
+
+        else if (type_r === "update_one" && passed_check === check) {
+            return [monkey_operators_update.operators_update(one_doc, object_project), index_list]
         }
 
         /* ===================================================================== */
@@ -118,6 +72,10 @@ function iter_document_array(object_find, object_project = null, array_document,
             return_doc.push(index_list)
         }
 
+        else if (type_r === "update_many" && passed_check === check) {
+            return_doc.push([monkey_operators_update.operators_update(one_doc, object_project), index_list])
+        }
+
         if (iters_with_index.includes(type_r)) {index_list += 1}
         
     }
@@ -126,7 +84,6 @@ function iter_document_array(object_find, object_project = null, array_document,
     return return_doc
 
 }
-
 
 function project(object_return, object_project = null) {
     
@@ -170,7 +127,6 @@ class MonkeyCli {
     async #cache_document() {
         
         let files_list = await fs.readdir(this.path_collections + "/")
-        console.log(this.use_cache, files_list)
         
         // Si no estamos en modo cache
         if (!this.use_cache) {
@@ -253,8 +209,7 @@ class MonkeyCli {
     async insert_one(object_insert) {
         await this.#cache_document()
 
-        let acknowledged = false
-        let _id = monkey_utils.gen_uuid()
+        let _id = object_insert["_id"] || monkey_utils.gen_uuid()
 
         object_insert["_id"] = _id
 
@@ -266,20 +221,22 @@ class MonkeyCli {
             await save_document(this.full_path_collection, this.#document_cached["document"])
         }
 
-        acknowledged = true
-        return monkey_utils.monkey_db_return(acknowledged, _id)
+        return monkey_utils.monkey_db_return({
+            "acknowledged": true,
+            "_id": _id,
+            "insertedCount": 1
+        })
     }
 
     async insert_many(array_insert) {
         await this.#cache_document()
 
-        let acknowledged = false
         let insertedIds = []
 
         for (let doc_one of array_insert) {
             
             // Se genera un id para el objeto a insertar
-            let _id = monkey_utils.gen_uuid()
+            let _id = doc_one["_id"] || monkey_utils.gen_uuid()
             
             // Se le asigna el id
             doc_one["_id"] = _id
@@ -290,13 +247,24 @@ class MonkeyCli {
 
         }
 
+        if (!insertedIds) {
+            return monkey_utils.monkey_db_return({
+                "acknowledged": false,
+                "insertedCount": 0,
+                "insertedIds": []
+            })
+        }
+
         
         if (!this.use_cache) {
             await save_document(this.full_path_collection, this.#document_cached["document"])
         }
 
-        acknowledged = true
-        return monkey_utils.monkey_db_return(acknowledged, null, insertedIds.length, insertedIds)
+        return monkey_utils.monkey_db_return({
+            "acknowledged": true,
+            "insertedCount": insertedIds.length,
+            "insertedIds": insertedIds
+        })
     }
 
     async delete_one(object_find) {
@@ -311,31 +279,96 @@ class MonkeyCli {
             await save_document(this.full_path_collection, this.#document_cached["document"])
         }
 
-        acknowledged = true
-        return monkey_utils.monkey_db_return(acknowledged)
-
+        return monkey_utils.monkey_db_return({
+            "acknowledged": true,
+            "deletedCount": 1,
+        })
     }
 
     async delete_many(object_find) {
         await this.#cache_document()
 
-        let acknowledged = false
         let array_of_index_delete = await iter_document_array(object_find, null, this.#document_cached["document"], "delete_many")
         
-        for (let index_delete of array_of_index_delete) {this.#document_cached["document"].splice(index_delete)}
+        if (!array_of_index_delete) {
+            return monkey_utils.monkey_db_return({
+                "acknowledged": false,
+                "deletedCount": 0
+            })
+        }
+
+        for (let index_delete of array_of_index_delete) {
+            this.#document_cached["document"].splice(index_delete)
+        }
         
             
         if (!this.use_cache) {
             await save_document(this.full_path_collection, this.#document_cached["document"])
         }
 
-        acknowledged = true
-        return monkey_utils.monkey_db_return(acknowledged)
+        let deleted_account = array_of_index_delete.length
+        return monkey_utils.monkey_db_return({
+            "acknowledged": true,
+            "deletedCount": deleted_account
+        })
 
     }
 
-    update_one(object_find, mod_filter) {
+    async update_one(object_find, mod_filter) {
+        await this.#cache_document()
 
+        
+        let response = await iter_document_array(object_find, mod_filter, this.#document_cached["document"], "update_one")
+        
+        let new_document = response[0]
+
+        if (!new_document) {return monkey_utils.monkey_db_return({
+            "acknowledged": false,
+            "matchedCount": 0,
+            "modifiedCount": 0
+        })}
+
+        let index_update = response[1]
+
+        this.#document_cached["document"][index_update] = new_document
+
+        if (!this.use_cache) {
+            await save_document(this.full_path_collection, this.#document_cached["document"])
+        }
+
+        return monkey_utils.monkey_db_return({
+            "acknowledged": true,
+            "matchedCount": 1,
+            "modifiedCount": 1
+        })
+
+    }
+
+    async update_many(object_find, mod_filter) {
+        await this.#cache_document()
+
+        
+        let response = await iter_document_array(object_find, mod_filter, this.#document_cached["document"], "update_many")
+
+        for (let doc_updated of response) {
+
+            let new_document = doc_updated[0]
+            let index_update = doc_updated[1]
+
+            this.#document_cached["document"][index_update] = new_document
+        
+        }
+
+        if (!this.use_cache) {
+            await save_document(this.full_path_collection, this.#document_cached["document"])
+        }
+
+        let mod_count = response.length
+        return monkey_utils.monkey_db_return({
+            "acknowledged": true,
+            "modifiedCount": mod_count,
+            "matchedCount": mod_count
+        })
     }
 }
 
@@ -397,11 +430,16 @@ async function test() {
 
     console.log( await users.find_one({
         "name": {"$eq": "Jhon Doe"}, "edad": {"$gt": 40, "$lte": 75}
-    }))
+    }), "xddddddddddddddddd")
 
     
     console.log(await users.find_one({}))
-    console.log(await users.delete_many({"_id": {"$ne": "433ed0084651103ec7602d4719f64971"}}))
+    //console.log(await users.delete_many({"_id": {"$ne": "433ed0084651103ec7602d4719f64971"}}))
+    console.log(await users.update_one({"name": "Jhon Doe"}, {"$set": {"xd": "a", "l": 3}, "$rename": {"name": "username"}, "$mul": {"edad": 1}, "$currentDate": {"lastVisit": ""}, "$push": {"tics": "a"}}))
+
+    console.log(await users.update_many({"_id": {"$ne": 2}}, {"$set": {"password": "a1299129", "telefono": null}, "$pop": {"autos": -1}}))
+
+    console.log(await users.find({"name": {"$ne": "Jhon Doe"}}))
 }
 
 test()

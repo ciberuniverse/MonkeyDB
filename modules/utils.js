@@ -1,11 +1,16 @@
 const crypto = require("crypto")
 
-function monkey_db_return(acknowledged, _id = null, insertedCount = null, insertedIds = null) {
+function monkey_db_return({acknowledged, _id = null, insertedCount = null, insertedIds = null, matchedCount = null, modifiedCount = null, deletedCount = null}) {
     
     let return_vars = {
         "acknowledged": acknowledged,
         "_id": _id,
-        "insertedCount": insertedCount
+        "insertedCount": insertedCount,
+
+        "matchedCount": matchedCount,
+        "modifiedCount": modifiedCount,
+        "insertedIds": insertedIds,
+        "deletedCount": deletedCount
     }
     
     // Se itera cada clave valor de el diccionario y se eliminan los vacios
@@ -15,7 +20,7 @@ function monkey_db_return(acknowledged, _id = null, insertedCount = null, insert
             delete return_vars[key]
         }
     }
-
+    console.log(return_vars)
     return return_vars
 }
 
