@@ -1,0 +1,21 @@
+{
+  "name": "monkey-ldb",
+  "version": "1.0.0",
+  "description": "> Una base de datos NoSQL local para Node.js, inspirada en MongoDB y construida con pura curiosidad y ganas de aprender.",
+  "main": "MonkeyDB.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ciberuniverse/MonkeyDB.git"
+  },
+  "keywords": [],
+  "author": "Hernan Miranda",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ciberuniverse/MonkeyDB/issues"
+  },
+  "homepage": "https://github.com/ciberuniverse/MonkeyDB#readme"
+}

@@ -1,6 +1,5 @@
 const fs = require("fs/promises")
-const monkey_operators = require("./modules/operators.js")
-const monkey_operators_update = require("./modules/operators_update.js")
+const monkey_document = require("./modules/native_documents.js")
 const monkey_utils = require("./modules/utils.js")
 
 async function read_document(name) {
@@ -11,100 +10,6 @@ async function read_document(name) {
 async function save_document(name, new_document_object) {
     await fs.writeFile(name, JSON.stringify(new_document_object))
 }
-
-let iters_with_index = ["delete_many", "delete_one", "update_one", "update_many"]
-function iter_document_array(object_find, object_project = null, array_document, type_r = "find") {
-
-    let return_doc = []
-    let index_list = 0 // Variable que se usara para todo lo que requiera indice de listas
-
-    
-    // Se establece el numero de coincidencias desde el objeto a buscar
-    let check = Object.values(object_find).length
-    
-
-
-    // Por cada documento encontrado se revisara que cumpla con el filtro enviado
-    for (let one_doc of array_document) {
-        
-        // Contador de coincidencias por usuario
-        let passed_check = 0
-
-        // Se setean las variables para usarle dentro del for
-        let key, value
-        
-        for ([key, value] of Object.entries(object_find)) {
-            if (monkey_operators.operators_find(one_doc, key, value)) {passed_check += 1}
-        }
-
-        /* Seccion unicamente para resultados unicos que no requieren mayor iteracion */
-        // Se usan else if al ser mas rapidos
-        if (type_r === "delete_one" && passed_check === check) {
-            return index_list
-        }
-
-        // Se retorna la primera coincidencia con la proyeccion si es que se esta pidiendo uno solo
-        else if (type_r === "find_one" && passed_check === check) {
-            return project(one_doc, object_project)
-        }
-
-        else if (type_r === "update_one" && passed_check === check) {
-            return [monkey_operators_update.operators_update(one_doc, object_project), index_list]
-        }
-
-        /* ===================================================================== */
-
-        /* Seccion operacion listado 
-        
-        Todo lo que esta aqui debajo hasta lo limitado son las operaciones que requieren de una iteracion
-        completa del documento. Tales como find, delete_many
-        
-        */
-
-        // Si se cumple con el filtro se agrega a la lista y se continua
-        else if (type_r === "find" && passed_check === check) {
-            return_doc.push(project(one_doc, object_project))
-            continue
-        }
-
-        // Zonas que requieren indices
-        else if (type_r === "delete_many" && passed_check === check) {
-            return_doc.push(index_list)
-        }
-
-        else if (type_r === "update_many" && passed_check === check) {
-            return_doc.push([monkey_operators_update.operators_update(one_doc, object_project), index_list])
-        }
-
-        if (iters_with_index.includes(type_r)) {index_list += 1}
-        
-    }
-
-    // Se retornan todos los documentos en la lista
-    return return_doc
-
-}
-
-function project(object_return, object_project = null) {
-    
-    // Si es que no se trae ninguna proyeccion se retorna el objeto intacto
-    if (object_project === null) {return object_return}
-
-    let key, value
-    for ([key, value] of Object.entries(object_project)) {
-
-        // Si se le asigno un false o un 0 se elimina esa key del object
-        if (!value) {
-            delete object_return[key]
-        }
-
-    }
-
-    // Se retorna el nuevo object
-    return object_return
-}
-
-
 
 class MonkeyCli {
 
@@ -187,7 +92,7 @@ class MonkeyCli {
         let exist_doc = await this.#cache_document()
         if (!exist_doc) {return {}}
 
-        return iter_document_array(
+        return monkey_document.iter_document_array(
             object_find,
             object_project,
             this.#document_cached["document"],
@@ -202,7 +107,7 @@ class MonkeyCli {
         let exist_doc = await this.#cache_document()
         if (!exist_doc) {return []}
 
-        return iter_document_array(object_find, object_project, this.#document_cached["document"], "find")
+        return monkey_document.iter_document_array(object_find, object_project, this.#document_cached["document"], "find")
 
     }
 
@@ -272,7 +177,7 @@ class MonkeyCli {
 
         let acknowledged = false
     
-        let index_delete = iter_document_array(object_find, null, this.#document_cached["document"], "delete_one")
+        let index_delete = monkey_document.iter_document_array(object_find, null, this.#document_cached["document"], "delete_one")
         this.#document_cached["document"].splice(index_delete)
     
         if (!this.use_cache) {
@@ -288,7 +193,7 @@ class MonkeyCli {
     async delete_many(object_find) {
         await this.#cache_document()
 
-        let array_of_index_delete = await iter_document_array(object_find, null, this.#document_cached["document"], "delete_many")
+        let array_of_index_delete = await monkey_document.iter_document_array(object_find, null, this.#document_cached["document"], "delete_many")
         
         if (!array_of_index_delete) {
             return monkey_utils.monkey_db_return({
@@ -318,7 +223,7 @@ class MonkeyCli {
         await this.#cache_document()
 
         
-        let response = await iter_document_array(object_find, mod_filter, this.#document_cached["document"], "update_one")
+        let response = await monkey_document.iter_document_array(object_find, mod_filter, this.#document_cached["document"], "update_one")
         
         let new_document = response[0]
 
@@ -348,7 +253,7 @@ class MonkeyCli {
         await this.#cache_document()
 
         
-        let response = await iter_document_array(object_find, mod_filter, this.#document_cached["document"], "update_many")
+        let response = await monkey_document.iter_document_array(object_find, mod_filter, this.#document_cached["document"], "update_many")
 
         for (let doc_updated of response) {
 
@@ -418,28 +323,5 @@ class MonkeyDB {
 
 }
 
-
-const MonkeyCLI_DB = new MonkeyDB("monkey_test", ".", false)
-
-async function test() {
-    
-    
-    const users = await MonkeyCLI_DB.create_collection("users")
-    await users.insert_one({"name": "Jhon coe"})
-    await users.insert_one({"name": "Jhon Doe", "edad": 74})
-
-    console.log( await users.find_one({
-        "name": {"$eq": "Jhon Doe"}, "edad": {"$gt": 40, "$lte": 75}
-    }), "xddddddddddddddddd")
-
-    
-    console.log(await users.find_one({}))
-    //console.log(await users.delete_many({"_id": {"$ne": "433ed0084651103ec7602d4719f64971"}}))
-    console.log(await users.update_one({"name": "Jhon Doe"}, {"$set": {"xd": "a", "l": 3}, "$rename": {"name": "username"}, "$mul": {"edad": 1}, "$currentDate": {"lastVisit": ""}, "$push": {"tics": "a"}}))
-
-    console.log(await users.update_many({"_id": {"$ne": 2}}, {"$set": {"password": "a1299129", "telefono": null}, "$pop": {"autos": -1}}))
-
-    console.log(await users.find({"name": {"$ne": "Jhon Doe"}}))
-}
-
-test()
+// Se exporta unicamente MonkeyDB encargado de crear la base de datos
+module.exports = {MonkeyDB}

@@ -18,12 +18,15 @@ MonkeyDB es una base de datos experimental que almacena datos en archivos JSON, 
 
 ## Instalación
 
-*(Pendiente de publicación en npm)*
+```
+npm init -y
+npm install monkey-ldb
+```
 
 ## Uso básico
 
 ```javascript
-const { MonkeyDB } = require('monkeydb');
+const { MonkeyDB } = require('monkey-ldb');
 
 (async () => {
   // Crear o abrir una base de datos
